@@ -5,13 +5,9 @@ from multiprocessing import Process, Pipe
 def execute_commande(commande, args, retour_write):
     # Rediriger la sortie standard vers le tube
     os.dup2(retour_write, 1)
-    
-    # Fermer le descripteur de fichier pour le tube en écriture
-    # car après dup2, il n'est plus nécessaire
+   
     os.close(retour_write)
-    
-    # Exécuter la commande avec execl
-    os.execl("/usr/bin/python3", "python3", commande, str(os.getpid()), *args)
+    os.execl("/usr/bin/python3", "python3", commande, str(os.getpid()), *args)    # Exécuter la commande avec execl
 
 def main():
     nb = 4  # nombre de processus à créer
@@ -48,16 +44,13 @@ def main():
     retours_calcul = []
     
     for fd in tubes:
-        # Lire les données du tube
         resultat = os.read(fd, 1024).decode().strip()
         retours_calcul.append(resultat)
         os.close(fd)
     
-    # Attendre la fin des processus enfants
-    for pid in processus:
+    for pid in processus: #on attend le processus des enfants 
         os.waitpid(pid, 0)
-    
-    # Afficher les résultats
+        
     print("Résultats collectés:")
     for resultat in retours_calcul:
         print(resultat)
