@@ -1,67 +1,83 @@
 import os
-import sys
+import random
+import time
 import select
 
-nb = 3  # nombre de processus enfants
-taches = ["python3 script1.py", "python3 script2.py", "python3 script3.py", "python3 script4.py"]
+def executer(nb, taches):
+    ordre_pipes = []
+    retour_r, retour_w = os.pipe()
 
-ordre_pipes = []  # tubes parent -> enfants
-retour_r, retour_w = os.pipe()  # tube enfants -> parent
+    enfants_pids = []
 
-# Création des tubes et des processus enfants
-for i in range(nb):
-    r, w = os.pipe()
-    pid = os.fork()
-    if pid == 0:
-        # Enfant
-        os.close(w)  # ferme le bout d’écriture
-        os.close(retour_r)  # l’enfant n’a pas besoin de lire sur retour
-        ordre_fd = r
-        retour_fd = retour_w
-        identifiant = str(i + 1)
+    # Création des enfants
+    for i in range(nb):
+        r, w = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            # Enfant
+            os.close(w)
+            os.close(retour_r)
+            ordre_fd = r
+            retour_fd = retour_w
+            identifiant = i + 1
 
-        while True:
-            commande = os.read(ordre_fd, 1024).decode()
-            if not commande:
-                break  # tube fermé
-            args = commande.strip().split()
-            # Exécute la commande reçue (remplace le processus)
-            try:
-                os.execvp(args[0], args)
-            except Exception as e:
-                os.write(retour_fd, f"ERREUR {identifiant}\n".encode())
-                os._exit(1)
-    else:
-        # Parent
-        os.close(r)  # ferme le bout de lecture
-        ordre_pipes.append(w)
+            while True:
+                data = os.read(ordre_fd, 1024)
+                if not data:
+                    break
+                try:
+                    cmd = int(data.decode().strip())
+                    time.sleep(cmd)
+                    os.write(retour_fd, f"{identifiant}\n".encode())
+                except:
+                    break
+            os._exit(0)
+        else:
+            os.close(r)
+            ordre_pipes.append(w)
+            enfants_pids.append(pid)
 
-# Le parent continue ici
-os.close(retour_w)  # le parent n’écrit pas dans retour
-disponibles = list(range(1, nb + 1))  # file des enfants disponibles
-ordre_dict = {i + 1: ordre_pipes[i] for i in range(nb)}  # id -> pipe
+    os.close(retour_w)
+    disponibles = list(range(1, nb + 1))
+    ordre_dict = {i + 1: ordre_pipes[i] for i in range(nb)}
+    retour_fd = retour_r
+    poll = select.poll()
+    poll.register(retour_fd, select.POLLIN)
 
-# Écoute non-bloquante sur retour
-retour_fd = retour_r
-poll = select.poll()
-poll.register(retour_fd, select.POLLIN)
+    remaining = list(taches)
+    start_time = time.time()
 
-while taches or disponibles != list(range(1, nb + 1)):
-    # Attribuer les tâches disponibles
-    while taches and disponibles:
-        cmd = taches.pop(0)
-        enfant_id = disponibles.pop(0)
-        os.write(ordre_dict[enfant_id], (cmd + "\n").encode())
+    while remaining or disponibles != list(range(1, nb + 1)):
+        while remaining and disponibles:
+            cmd = remaining.pop(0)
+            enfant_id = disponibles.pop(0)
+            os.write(ordre_dict[enfant_id], f"{cmd}\n".encode())
 
-    # Attendre qu’un enfant se libère si aucun n’est disponible
-    if not disponibles:
-        events = poll.poll()
-        for fd, event in events:
-            if event & select.POLLIN:
-                msg = os.read(retour_fd, 1024).decode()
-                for ligne in msg.strip().splitlines():
-                    if ligne.startswith("ERREUR"):
-                        enfant_id = int(ligne.split()[1])
-                    else:
+        if not disponibles:
+            events = poll.poll()
+            for fd, event in events:
+                if event & select.POLLIN:
+                    msg = os.read(retour_fd, 1024).decode()
+                    for ligne in msg.strip().splitlines():
                         enfant_id = int(ligne.strip())
-                    disponibles.append(enfant_id)
+                        disponibles.append(enfant_id)
+
+    end_time = time.time()
+    for w in ordre_pipes:
+        os.close(w)
+    os.close(retour_fd)
+    for pid in enfants_pids:
+        os.waitpid(pid, 0)
+
+    return end_time - start_time
+
+
+if __name__ == "__main__":
+    nb_taches = 100
+    taches = [random.randint(1, 10) for _ in range(nb_taches)]
+    essais = [1, 2, 4, 8, 16, 32]
+
+    print(f"\nDes tests sur {nb_taches} tâches (valeurs entre 1 et 10 secondes) :\n")
+    for nb in essais:
+        duree = executer(nb, taches)
+        print(f"  - nb = {nb:<2} -> Temps total : {duree:.2f} secondes")
