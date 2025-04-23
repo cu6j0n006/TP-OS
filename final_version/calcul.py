@@ -1,7 +1,6 @@
 import sys
 
 def somme_leibniz(N1, N2):
-    """Calcule la somme partielle de Leibniz de N1 (inclus) à N2 (non inclus)."""
     somme = 0.0
     for n in range(N1, N2):
         terme = 1.0 / (2 * n + 1)

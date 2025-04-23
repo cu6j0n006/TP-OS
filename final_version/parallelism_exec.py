@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from multiprocessing import Process, Pipe
 
 def execute_commande(commande, args, retour_write):
@@ -20,7 +21,7 @@ def main():
     
     processus = []
     tubes = []
-    
+
     #in this section, the child computes the commands 
     #and sends a return to the parent. 
     # child -> write (compute) -> parent -> read 
@@ -32,7 +33,7 @@ def main():
         if pid == 0:  
             os.close(retour_read)
             execute_commande(cmd_args[0], cmd_args[1:], retour_write) # Exécuter la commande
-
+            
             sys.exit(1) # os._exit(1)
 
         else:
@@ -51,6 +52,8 @@ def main():
     for pid in processus: #on attend le processus des enfants 
         os.waitpid(pid, 0)
         
+    
+
     print("Résultats collectés:")
     for resultat in retours_calcul:
         print(resultat)
